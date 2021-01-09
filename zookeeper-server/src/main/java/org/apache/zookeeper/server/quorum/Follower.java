@@ -125,7 +125,7 @@ public class Follower extends Learner{
             fzk.logRequest(hdr, txn);
             break;
         case Leader.COMMIT:
-            fzk.commit(qp.getZxid());
+            fzk.commit(qp.getZxid()); // Followr 节点收到 Leader 节点的 COMMIT 消息时的处理（唤醒 CommitProcessor 处理）
             break;
         case Leader.UPTODATE:
             LOG.error("Received an UPTODATE message after Follower started");

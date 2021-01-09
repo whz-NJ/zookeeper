@@ -1,0 +1,54 @@
+写数据流程：
+https://www.cnblogs.com/zhuchangwu/p/11619978.html
+dataLogDir 如果没提供的话使用的则是dataDir。zookeeper的持久化都存储在这两个目录里。dataLogDir里是放到的顺序日志(WAL)。
+而dataDir里放的是内存数据结构的snapshot，便于快速恢复。为了达到性能最大化，一般建议把dataDir和dataLogDir分到不同的磁盘上，
+这样就可以充分利用磁盘顺序写的特性。
+SyncRequestProcessor 写 WAL 事务日志
+https://segmentfault.com/a/1190000018927058
+ZooKeeper的每个节点维护者三个Zxid值，分别为：cZxid、mZxid、pZxid。
+cZxid：节点创建时间 create
+mZxid：节点最近一次修改时间 modify
+pZxid：该节点的子节点列表最后一次被修改时的时间，子节点内容变更不会变更pZxid
+7）ZXID：每次对Zookeeper的状态的改变都会产生一个zxid（ZooKeeperTransaction Id），zxid是全局有序的，如果zxid1小于zxid2，则zxid1在zxid2之前发生。
+
+
+数据恢复过程：
+https://blog.csdn.net/w1673492580/article/details/89217556
+其实在上篇关于选举的博客中说过，集群在启动时首先做的是数据加载loadDataBase()，然后才是选举。数据加载流程大概如下
+
+创建ZKDatabase，给定对应的快照目录与事务日志目录
+从快照目录中加载最后的快照文件内容。（由于每次快照都会全量dump数据，所以最新的快照数据通常是最全的）。
+通过比较事务ID（快照文件名、事务日志文件名中的后缀即最新事务ID），获取事务记录增量数据（有可能跨多个事务日志文件），迭代事务日志文件列表，到快照之后产生的事务日志，进行更新。（即更新增量数据）将事务日志同步到committedLog中，以便集群间快速同步
+
+（只是加载了快照，它落后于逻辑日志，也就是说启动后，内存里的数据可能不是最新的，这样后面再getdata就是错误的，需要把快照落后部分恢复到内存）
+https://blog.csdn.net/IAmListening/article/details/95197707
+在$ZOOKEEPER_HOME/data和$ZOOKEEPER_HOME/datalog文件夹中, 有zookeeper的快照和增量日志, 根据快照和增量日志, 可以将zookeeper恢复到指定的状态
+快照和日志文件都是可读的, 参考使用下述指令（应该是先用快照恢复，再用增量日志恢复）
+# 查看Log
+java -cp dist-maven/zookeeper-3.4.9.jar;lib/log4j-1.2.16.jar;lib/slf4j-log4j12-1.6.1.jar;lib/slf4j-api-1.6.1.jar org.apache.zookeeper.server.LogFormatter log.4115cad8c1
+# 查看快照
+java -cp dist-maven/zookeeper-3.4.9.jar;lib/log4j-1.2.16.jar;lib/slf4j-log4j12-1.6.1.jar;lib/slf4j-api-1.6.1.jar org.apache.zookeeper.server.SnapshotFormatter snapshot.4115cad8bf
+https://www.jianshu.com/p/67a166c4c1ba
+1.每一次事物日志写入完毕以后，Zookeeper都会检测一次是否需要写入到快照中的操作，理论上达到snapCount次数以后的事物日志就要触发快照的demp操作，但是考虑整体性能，Zookeeper并不是每一次都会执行demp，而是选择使用了过半随机的原则，即:
+logCount > (snapCount /2 + randRoll)
+3.完成内存数据库的初始化以后，就要读取快照文件，进行全量数据恢复了，这个时候会默认读取最多一百个最新的快照文件，然后从ZXID最大的快照文件开始，进行逐个解析，进行反序列化操作，然后生成DataTree和sessionWithTimeout，并且根据checkSum校验完整性，如果校验失败，会放弃这个快照文件，选择第二个ZXID最大的快照文件，继续解析，依次类推，如果读取到的最多一百个快照文件都失败了，那么就直接启动失败，如果有校验成功的，则使用该文件进行全量恢复。
+
+
+
+
+ZooKeeper选举流程分析（FLE）
+https://zhuanlan.zhihu.com/p/48418023
+electionEpoch
+https://www.jianshu.com/p/75e48405d678
+Zab协议有两种模式，它们分别是恢复模式（选主）和广播模式（同步）。当服务启动或者在领导者崩溃后，Zab就进入了恢复模式，当领导者被选举出来，且大多数Server完成了和leader的状态同步以后，恢复模式就结束了。状态同步保证了leader和Server具有相同的系统状态。leader选举是保证分布式数据一致性的关键。
+https://my.oschina.net/iioschina/blog/872978
+
+https://blog.csdn.net/weixin_43843104/article/details/112216733
+每个当选产生一个新的 Leader服务器，就会从这个 Leader服务器上取出其本地日志中最大事务的 ZXID，并从中读取epoch 值，然后加 1，以此作为新的 epoch，并将低 32 位从 0 开始计数。
+Zxid（Transaction id）类似于 RDBMS 中的事务 ID，用于标识一次更新操作的 Proposal（提议）ID。为了保证顺序性，该 zkid 必须单调递增。
+日志文件中文件名为log，后缀即为十六进制的ZXID
+
+https://www.cnblogs.com/veblen/p/10992103.html
+
+
+

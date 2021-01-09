@@ -117,7 +117,7 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
             System.exit(12);
         }
         Request request = pendingTxns.remove();
-        commitProcessor.commit(request);
+        commitProcessor.commit(request); // WHZ Follower 节点收到 Leader 节点COMMIT消息时的处理（交给 CommitProcessor ）
     }
     
     synchronized public void sync(){

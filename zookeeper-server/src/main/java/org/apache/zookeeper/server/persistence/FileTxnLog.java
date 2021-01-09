@@ -211,7 +211,7 @@ public class FileTxnLog implements TxnLog {
             lastZxidSeen = hdr.getZxid();
         }
 
-        if (logStream==null) {
+        if (logStream==null) { // WHZ WAL 事务文件还未创建
            if(LOG.isInfoEnabled()){
                 LOG.info("Creating new log file: " + Util.makeLogName(hdr.getZxid()));
            }
@@ -236,7 +236,7 @@ public class FileTxnLog implements TxnLog {
         Checksum crc = makeChecksumAlgorithm();
         crc.update(buf, 0, buf.length);
         oa.writeLong(crc.getValue(), "txnEntryCRC");
-        Util.writeTxnBytes(oa, buf);
+        Util.writeTxnBytes(oa, buf); // WHZ 真正写事务日志的处理（但还没有调flush，可能还没落盘）
 
         return true;
     }
@@ -323,7 +323,7 @@ public class FileTxnLog implements TxnLog {
      */
     public synchronized void commit() throws IOException {
         if (logStream != null) {
-            logStream.flush();
+            logStream.flush(); // WHZ 调用 flush 操作，确保落盘
         }
         for (FileOutputStream log : streamsToFlush) {
             log.flush();

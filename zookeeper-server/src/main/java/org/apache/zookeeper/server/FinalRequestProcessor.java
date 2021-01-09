@@ -116,7 +116,7 @@ public class FinalRequestProcessor implements RequestProcessor {
                TxnHeader hdr = request.hdr;
                Record txn = request.txn;
 
-               rc = zks.processTxn(hdr, txn);
+               rc = zks.processTxn(hdr, txn); // WHZ 更新内存里的数据
             }
             // do not add non quorum packets to the queue.
             if (Request.isQuorum(request.type)) {
@@ -416,7 +416,7 @@ public class FinalRequestProcessor implements RequestProcessor {
                     request.createTime, Time.currentElapsedTime());
 
         try {
-            cnxn.sendResponse(hdr, rsp, "response");
+            cnxn.sendResponse(hdr, rsp, "response"); // WHZ 给客户端回复响应
             if (closeSession) {
                 cnxn.sendCloseSession();
             }

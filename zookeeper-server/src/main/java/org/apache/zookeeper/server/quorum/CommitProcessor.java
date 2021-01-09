@@ -74,20 +74,20 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements RequestP
             while (!finished) {
                 int len = toProcess.size();
                 for (int i = 0; i < len; i++) {
-                    nextProcessor.processRequest(toProcess.get(i));
+                    nextProcessor.processRequest(toProcess.get(i)); // WHZ 将经过半数节点确认的 Proposal 消息丢给下一个 Processor （ToBeAppliedRequestProcessor） 处理
                 }
                 toProcess.clear();
                 synchronized (this) {
                     if ((queuedRequests.size() == 0 || nextPending != null)
-                            && committedRequests.size() == 0) {
-                        wait();
+                            && committedRequests.size() == 0) { // 没有待处理的经过半数节点确认的 Proposal 消息时就等待
+                        wait(); // WHZ 等待 ACK 超过半数才进行后面的处理
                         continue;
                     }
                     // First check and see if the commit came in for the pending
                     // request
                     if ((queuedRequests.size() == 0 || nextPending != null)
                             && committedRequests.size() > 0) {
-                        Request r = committedRequests.remove();
+                        Request r = committedRequests.remove(); // WHZ 取出经过半数节点确认的 Proposal 消息
                         /*
                          * We match with nextPending so that we can move to the
                          * next request when it is committed. We also want to
@@ -163,8 +163,8 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements RequestP
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Committing request:: " + request);
             }
-            committedRequests.add(request);
-            notifyAll();
+            committedRequests.add(request); // WHZ 将收到超过半数节点的ACK消息对应的 Proposal 加入 committedRequests 队列
+            notifyAll(); // WHZ 已经收到超过一半节点的 ACK 消息了，唤醒 CommitProcessor
         }
     }
 

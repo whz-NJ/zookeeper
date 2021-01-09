@@ -639,7 +639,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         super.start();
     }
 
-    private void loadDataBase() {
+    private void loadDataBase() { // WHZ 加载快照数据
         File updating = new File(getTxnFactory().getSnapDir(),
                                  UPDATING_EPOCH_FILENAME);
 		try {
@@ -781,9 +781,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
      * 
      * @return the highest zxid for this host
      */
-    public long getLastLoggedZxid() {
+    public long getLastLoggedZxid() { // WHZ 加载快照数据，得到最大的zxid
         if (!zkDb.isInitialized()) {
-        	loadDataBase();
+        	loadDataBase(); // WHZ 在选举前，先加载快照和逻辑日志到内存
         }
         return zkDb.getDataTreeLastProcessedZxid();
     }
@@ -942,7 +942,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                         try {
                             roZkMgr.start();
                             setBCVote(null);
-                            setCurrentVote(makeLEStrategy().lookForLeader());
+                            setCurrentVote(makeLEStrategy().lookForLeader()); // WHZ 投票开始入口
                         } catch (Exception e) {
                             LOG.warn("Unexpected exception",e);
                             setPeerState(ServerState.LOOKING);

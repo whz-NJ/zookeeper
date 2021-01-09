@@ -97,7 +97,7 @@ public class FastLeaderElection implements Election {
         /*
          * Proposed leader
          */
-        long leader;
+        long leader; //WHZ 选票选举的leader的ID
 
         /*
          * zxid of the proposed leader
@@ -117,7 +117,7 @@ public class FastLeaderElection implements Election {
         /*
          * Address of sender
          */
-        long sid;
+        long sid; // WHZ 发出投票的节点id
 
         /*
          * epoch of the proposed leader
@@ -230,7 +230,7 @@ public class FastLeaderElection implements Election {
          * method run(), and processes such messages.
          */
 
-        class WorkerReceiver extends ZooKeeperThread {
+        class WorkerReceiver extends ZooKeeperThread { // WHZ 选举时仅创建一个 WorkerReceiver
             volatile boolean stop;
             QuorumCnxManager manager;
 
@@ -246,7 +246,7 @@ public class FastLeaderElection implements Election {
                 while (!stop) {
                     // Sleeps on receive
                     try{
-                        response = manager.pollRecvQueue(3000, TimeUnit.MILLISECONDS);
+                        response = manager.pollRecvQueue(3000, TimeUnit.MILLISECONDS); //WHZ 读取外部消息 notification 消息
                         if(response == null) continue;
 
                         /*
@@ -257,15 +257,15 @@ public class FastLeaderElection implements Election {
                          * learner in the future, we'll have to change the
                          * way we check for observers.
                          */
-                        if(!validVoter(response.sid)){
+                        if(!validVoter(response.sid)){ // WHZ 为节点ID（serverId），即发出这个选票的节点的ID--推选者ID
                             Vote current = self.getCurrentVote();
                             ToSend notmsg = new ToSend(ToSend.mType.notification,
-                                    current.getId(),
+                                    current.getId(), //WHZ 代表被推举的 Leader 的节点ID
                                     current.getZxid(),
-                                    logicalclock.get(),
-                                    self.getPeerState(),
-                                    response.sid,
-                                    current.getPeerEpoch());
+                                    logicalclock.get(), // WHZ 逻辑时钟（选举轮次/周期），用来判断多个投票是否在同一轮选举周期中，该值在服务端是一个自增序列，每次进入新一轮的投票后，都会对该值进行加1操作。
+                                    self.getPeerState(), // WHZ 推选者自身状态
+                                    response.sid,  // WHZ 发出该选票的节点的ID（推选者ID--用来判断选票合法性）
+                                    current.getPeerEpoch()); //被推选者的选举周期
 
                             sendqueue.offer(notmsg);
                         } else {
@@ -290,7 +290,7 @@ public class FastLeaderElection implements Election {
                             Notification n = new Notification();
                             
                             // State of peer that sent this message
-                            QuorumPeer.ServerState ackstate = QuorumPeer.ServerState.LOOKING;
+                            QuorumPeer.ServerState ackstate = QuorumPeer.ServerState.LOOKING; // WHZ ackstate 为 notification 携带的对端状态（推选者状态）
                             switch (response.buffer.getInt()) {
                             case 0:
                                 ackstate = QuorumPeer.ServerState.LOOKING;
@@ -341,7 +341,7 @@ public class FastLeaderElection implements Election {
                              */
 
                             if(self.getPeerState() == QuorumPeer.ServerState.LOOKING){
-                                recvqueue.offer(n);
+                                recvqueue.offer(n); // WHZ 将接收到的 notification 放入 recvqueue
 
                                 /*
                                  * Send a notification back if the peer that sent this
@@ -350,17 +350,18 @@ public class FastLeaderElection implements Election {
                                  */
                                 if((ackstate == QuorumPeer.ServerState.LOOKING)
                                         && (n.electionEpoch < logicalclock.get())){
-                                    Vote v = getVote();
-                                    ToSend notmsg = new ToSend(ToSend.mType.notification,
-                                            v.getId(),
-                                            v.getZxid(),
-                                            logicalclock.get(),
-                                            self.getPeerState(),
-                                            response.sid,
-                                            v.getPeerEpoch());
+                                    Vote v = getVote(); // WHZ 本阶段的 logicalclock 比对端节点发来的 notification 选票的 electionEpoch 大
+                                    ToSend notmsg = new ToSend(ToSend.mType.notification, // WHZ 将本地缓存的选票发给对端
+                                            v.getId(), // WHZ 被推选者的id
+                                            v.getZxid(),  // WHZ 被推选者的 zxid
+                                            logicalclock.get(), // WHZ 推选者自己的选举周期
+                                            self.getPeerState(), // WHZ 推选者自己的状态
+                                            response.sid, // WHZ 推选者ID，设置为对端节点（确保对端正常处理该选票??）
+                                            v.getPeerEpoch()); // WHZ 被推选者的选举周期
                                     sendqueue.offer(notmsg);
                                 }
-                            } else {
+                            } else { // WHZ 本地状态不是 Looking，则把本地认为的Leader发给对方（收到 notification/发出notificaion，不会死循环吗？）
+                                     // WHZ Zookeeper能够保证接收方在处理消息时，会对重复消息进行正确的处理。（只允许SID大的节点连接SID小的节点）
                                 /*
                                  * If this server is not looking, but the one that sent the ack
                                  * is looking, then send back what it believes to be the leader.
@@ -416,7 +417,7 @@ public class FastLeaderElection implements Election {
          * and queues it on the manager's queue.
          */
 
-        class WorkerSender extends ZooKeeperThread {
+        class WorkerSender extends ZooKeeperThread { //WHZ 整个选举过程只有一个 WorkerSender
             volatile boolean stop;
             QuorumCnxManager manager;
 
@@ -446,12 +447,12 @@ public class FastLeaderElection implements Election {
              * @param m     message to send
              */
             void process(ToSend m) {
-                ByteBuffer requestBuffer = buildMsg(m.state.ordinal(), 
-                                                        m.leader,
-                                                        m.zxid, 
-                                                        m.electionEpoch, 
-                                                        m.peerEpoch);
-                manager.toSend(m.sid, requestBuffer);
+                ByteBuffer requestBuffer = buildMsg(m.state.ordinal(),  // WHZ ordinal 为 Enum 内部方法，返回序号
+                                                        m.leader, // WHZ 被推选者ID
+                                                        m.zxid,  // WHZ 被推选者的zxid（包含被推选者的选举周期）
+                                                        m.electionEpoch, // WHZ 推选者的选举周期
+                                                        m.peerEpoch); // WHZ 被推选者的选举周期
+                manager.toSend(m.sid, requestBuffer); // WHZ 调用 QuorumCnxManager.toSend 发送选票给 sid 节点
             }
         }
 
@@ -464,7 +465,7 @@ public class FastLeaderElection implements Election {
          *
          * @param manager   Connection manager
          */
-        Messenger(QuorumCnxManager manager) {
+        Messenger(QuorumCnxManager manager) { //WHZ 每轮选举只创建一个 Messager
 
             this.ws = new WorkerSender(manager);
 
@@ -493,7 +494,7 @@ public class FastLeaderElection implements Election {
 
     QuorumPeer self;
     Messenger messenger;
-    AtomicLong logicalclock = new AtomicLong(); /* Election instance */
+    AtomicLong logicalclock = new AtomicLong(); /* Election instance */ // WHZ 初始值为0
     long proposedLeader;
     long proposedZxid;
     long proposedEpoch;
@@ -533,8 +534,8 @@ public class FastLeaderElection implements Election {
      */
     private void starter(QuorumPeer self, QuorumCnxManager manager) {
         this.self = self;
-        proposedLeader = -1;
-        proposedZxid = -1;
+        proposedLeader = -1; // WHZ 启动时通过 updateProposal() 更新为自身ID
+        proposedZxid = -1; // WHZ 启动时通过 updateProposal() 更新为快照保存数据的最大的zxid
 
         sendqueue = new LinkedBlockingQueue<ToSend>();
         recvqueue = new LinkedBlockingQueue<Notification>();
@@ -569,7 +570,7 @@ public class FastLeaderElection implements Election {
     /**
      * Send notifications to all peers upon a change in our vote
      */
-    private void sendNotifications() {
+    private void sendNotifications() {  //WHZ 给所有的节点发自己投出的选票
         for (QuorumServer server : self.getVotingView().values()) {
             long sid = server.id;
 
@@ -578,7 +579,7 @@ public class FastLeaderElection implements Election {
                     proposedZxid,
                     logicalclock.get(),
                     QuorumPeer.ServerState.LOOKING,
-                    sid,
+                    sid,  // WHZ 接收该选票的节点的ID
                     proposedEpoch);
             if(LOG.isDebugEnabled()){
                 LOG.debug("Sending Notification: " + proposedLeader + " (n.leader), 0x"  +
@@ -618,7 +619,7 @@ public class FastLeaderElection implements Election {
          *  as current zxid, but server id is higher.
          */
         
-        return ((newEpoch > curEpoch) || 
+        return ((newEpoch > curEpoch) ||  // WHZ totalOrderPredicate() 为判断收到的新选票选出的 Leader 自己是否同意
                 ((newEpoch == curEpoch) &&
                 ((newZxid > curZxid) || ((newZxid == curZxid) && (newId > curId)))));
     }
@@ -643,11 +644,11 @@ public class FastLeaderElection implements Election {
          */
         for (Map.Entry<Long,Vote> entry : votes.entrySet()) {
             if (vote.equals(entry.getValue())){
-                set.add(entry.getKey());
+                set.add(entry.getKey()); //WHZ  保存推选者的ID
             }
         }
 
-        return self.getQuorumVerifier().containsQuorum(set);
+        return self.getQuorumVerifier().containsQuorum(set); // WHZ 看看支持 vote 被推选者的选票数是否超过一半
     }
 
     /**
@@ -662,9 +663,9 @@ public class FastLeaderElection implements Election {
      * @param   electionEpoch   epoch id
      */
     protected boolean checkLeader(
-            HashMap<Long, Vote> votes,
-            long leader,
-            long electionEpoch){
+            HashMap<Long, Vote> votes, // WHZ 本节点收到的所有的选票
+            long leader, // WHZ 被推选者的ID
+            long electionEpoch){ // WHZ
 
         boolean predicate = true;
 
@@ -758,7 +759,7 @@ public class FastLeaderElection implements Election {
      *
      * @return long
      */
-    private long getInitLastLoggedZxid(){
+    private long getInitLastLoggedZxid(){ // WHZ 从快照文件里得到最大的 zxid
         if(self.getLearnerType() == LearnerType.PARTICIPANT)
             return self.getLastLoggedZxid();
         else return Long.MIN_VALUE;
@@ -799,15 +800,15 @@ public class FastLeaderElection implements Election {
            self.start_fle = Time.currentElapsedTime();
         }
         try {
-            HashMap<Long, Vote> recvset = new HashMap<Long, Vote>();
+            HashMap<Long, Vote> recvset = new HashMap<Long, Vote>(); // WHZ 保存在 LOOKING 状态下收到的选票信息
 
-            HashMap<Long, Vote> outofelection = new HashMap<Long, Vote>();
+            HashMap<Long, Vote> outofelection = new HashMap<Long, Vote>(); // WHZ 保存在非 LOOKING 状态下收到的选票信息
 
             int notTimeout = finalizeWait;
 
             synchronized(this){
-                logicalclock.incrementAndGet();
-                updateProposal(getInitId(), getInitLastLoggedZxid(), getPeerEpoch());
+                logicalclock.incrementAndGet(); // WHZ 标识新一轮的投票开始
+                updateProposal(getInitId(), getInitLastLoggedZxid(), getPeerEpoch()); // WHZ 使用快照数据里最大的ZXID作为选票的 zxid（不能用逻辑日志记录的，因为恢复时读取的是快照到内存，然后apply后续的逻辑日志）
             }
 
             LOG.info("New election. My id =  " + self.getId() +
@@ -818,7 +819,7 @@ public class FastLeaderElection implements Election {
              * Loop in which we exchange notifications until we find a leader
              */
 
-            while ((self.getPeerState() == ServerState.LOOKING) &&
+            while ((self.getPeerState() == ServerState.LOOKING) && // WHZ 只有状态为 LOOKING 时才循环
                     (!stop)){
                 /*
                  * Remove next notification from queue, times out after 2 times
@@ -835,7 +836,7 @@ public class FastLeaderElection implements Election {
                     if(manager.haveDelivered()){
                         sendNotifications();
                     } else {
-                        manager.connectAll();
+                        manager.connectAll(); //WHZ 连接所有其他节点
                     }
 
                     /*
@@ -851,21 +852,21 @@ public class FastLeaderElection implements Election {
                      * Only proceed if the vote comes from a replica in the
                      * voting view for a replica in the voting view.
                      */
-                    switch (n.state) {
+                    switch (n.state) { //WHZ 这里是 FLE 核心
                     case LOOKING:
                         // If notification > current, replace and send messages out
                         if (n.electionEpoch > logicalclock.get()) {
-                            logicalclock.set(n.electionEpoch);
+                            logicalclock.set(n.electionEpoch); // WHZ 如果当前逻辑时钟小于收到消息的epoch，则设置为该epoch
                             recvset.clear();
                             if(totalOrderPredicate(n.leader, n.zxid, n.peerEpoch,
-                                    getInitId(), getInitLastLoggedZxid(), getPeerEpoch())) {
-                                updateProposal(n.leader, n.zxid, n.peerEpoch);
+                                    getInitId(), getInitLastLoggedZxid(), getPeerEpoch())) { // WHZ 如果新选票选出的Leader 比系统启动时记录的 Leader 更适合当 Leader
+                                updateProposal(n.leader, n.zxid, n.peerEpoch); // WHZ 更新自己的选票信息
                             } else {
-                                updateProposal(getInitId(),
+                                updateProposal(getInitId(), // WHZ 如果新选票选出的Leader 比系统启动时记录的 Leader 更差，则用系统初始Leader选票更新自己当前最新选票
                                         getInitLastLoggedZxid(),
                                         getPeerEpoch());
                             }
-                            sendNotifications();
+                            sendNotifications(); // WHZ 将最新选票信息发出去
                         } else if (n.electionEpoch < logicalclock.get()) {
                             if(LOG.isDebugEnabled()){
                                 LOG.debug("Notification election epoch is smaller than logicalclock. n.electionEpoch = 0x"
@@ -874,7 +875,7 @@ public class FastLeaderElection implements Election {
                             }
                             break;
                         } else if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch,
-                                proposedLeader, proposedZxid, proposedEpoch)) {
+                                proposedLeader, proposedZxid, proposedEpoch)) { // WHZ 如果新选票选出的Leader 比系统当前记录的 Leader 更适合当 Leader
                             updateProposal(n.leader, n.zxid, n.peerEpoch);
                             sendNotifications();
                         }
@@ -888,16 +889,16 @@ public class FastLeaderElection implements Election {
 
                         recvset.put(n.sid, new Vote(n.leader, n.zxid, n.electionEpoch, n.peerEpoch));
 
-                        if (termPredicate(recvset,
+                        if (termPredicate(recvset, //WHZ 如果当前节点建议的Leader收到了超过半数的选票
                                 new Vote(proposedLeader, proposedZxid,
                                         logicalclock.get(), proposedEpoch))) {
 
                             // Verify if there is any change in the proposed leader
                             while((n = recvqueue.poll(finalizeWait,
                                     TimeUnit.MILLISECONDS)) != null){
-                                if(totalOrderPredicate(n.leader, n.zxid, n.peerEpoch,
+                                if(totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, //从接收队列收到新的选票不支持当前建议的Leader
                                         proposedLeader, proposedZxid, proposedEpoch)){
-                                    recvqueue.put(n);
+                                    recvqueue.put(n); //WHZ 将选票重新放入接收队列，然后继续处理（说明还有一些节点不同意当前节点建议的Leader）
                                     break;
                                 }
                             }
@@ -908,7 +909,7 @@ public class FastLeaderElection implements Election {
                              */
                             if (n == null) {
                                 self.setPeerState((proposedLeader == self.getId()) ?
-                                        ServerState.LEADING: learningState());
+                                        ServerState.LEADING: learningState()); // WHZ 没有新的选票过来，检查建议的Leader是否是自己，如果是，则将状态置为Leading，否则置为FOLLOWING/OBSERVING
 
                                 Vote endVote = new Vote(proposedLeader,
                                                         proposedZxid,
@@ -951,7 +952,7 @@ public class FastLeaderElection implements Election {
                          * Before joining an established ensemble, verify
                          * a majority is following the same leader.
                          */
-                        outofelection.put(n.sid, new Vote(n.version,
+                        outofelection.put(n.sid, new Vote(n.version, // WHZ 保存在非 LOOKING 状态下收到的选票信息
                                                             n.leader,
                                                             n.zxid,
                                                             n.electionEpoch,

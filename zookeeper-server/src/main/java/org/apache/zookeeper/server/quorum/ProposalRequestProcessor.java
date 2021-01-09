@@ -42,9 +42,10 @@ public class ProposalRequestProcessor implements RequestProcessor {
     public ProposalRequestProcessor(LeaderZooKeeperServer zks,
             RequestProcessor nextProcessor) {
         this.zks = zks;
-        this.nextProcessor = nextProcessor;
+        this.nextProcessor = nextProcessor;  // WHZ ProposalRequestProcessor 的下一个 Processor 是 CommitProcessor
         AckRequestProcessor ackProcessor = new AckRequestProcessor(zks.getLeader());
-        syncProcessor = new SyncRequestProcessor(zks, ackProcessor);
+        syncProcessor = new SyncRequestProcessor(zks, ackProcessor); // WHZ SyncRequestProcessor 的下一个 Processor 是 AckRequestProcessor
+                                                                  // WHZ ProposalRequestProcessor 同时管理 SyncRequestProcessor(写日志)
     }
     
     /**
@@ -71,15 +72,15 @@ public class ProposalRequestProcessor implements RequestProcessor {
         if(request instanceof LearnerSyncRequest){
             zks.getLeader().processSync((LearnerSyncRequest)request);
         } else {
-                nextProcessor.processRequest(request);
+                nextProcessor.processRequest(request); // WHZ 让 CommitProcessor 处理
             if (request.hdr != null) {
                 // We need to sync and get consensus on any transactions
                 try {
-                    zks.getLeader().propose(request);
+                    zks.getLeader().propose(request); // WHZ 发送 PROPOSAL 消息给个Follower节点
                 } catch (XidRolloverException e) {
                     throw new RequestProcessorException(e.getMessage(), e);
                 }
-                syncProcessor.processRequest(request);
+                syncProcessor.processRequest(request); // WHZ 通知 SyncRequestProcessor 写本地 WAL 日志，然后给自己发一个 ACK 消息（通过其后的 AckRequestProcessor完成）
             }
         }
     }

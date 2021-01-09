@@ -527,9 +527,9 @@ public class QuorumCnxManager {
              ArrayBlockingQueue<ByteBuffer> bq = new ArrayBlockingQueue<ByteBuffer>(SEND_CAPACITY);
              ArrayBlockingQueue<ByteBuffer> bqExisting = queueSendMap.putIfAbsent(sid, bq);
              if (bqExisting != null) {
-                 addToSendQueue(bqExisting, b);
+                 addToSendQueue(bqExisting, b); //之前已经给sid节点发过选票（缓存队列还在），就重用现有的队列
              } else {
-                 addToSendQueue(bq, b);
+                 addToSendQueue(bq, b); // WHZ 如果给sid节点发的消息没有缓存，则创建一个 ArrayBlockingQueue 专门给sid节点通信缓存，并把选票放入该队列
              }
              connectOne(sid);
                 
@@ -801,7 +801,7 @@ public class QuorumCnxManager {
      * soon as there is one available. If connection breaks, then opens a new
      * one.
      */
-    class SendWorker extends ZooKeeperThread {
+    class SendWorker extends ZooKeeperThread { // WHZ 每个远程服务器都分配一个单独的SendWorker
         Long sid;
         Socket sock;
         RecvWorker recvWorker;
@@ -956,7 +956,7 @@ public class QuorumCnxManager {
      * Thread to receive messages. Instance waits on a socket read. If the
      * channel breaks, then removes itself from the pool of receivers.
      */
-    class RecvWorker extends ZooKeeperThread {
+    class RecvWorker extends ZooKeeperThread { // WHZ 为每个远程服务器都分配一个单独的RecvWorker
         Long sid;
         Socket sock;
         volatile boolean running = true;

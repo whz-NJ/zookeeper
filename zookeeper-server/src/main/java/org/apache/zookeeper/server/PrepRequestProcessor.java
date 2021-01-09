@@ -407,7 +407,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
                         null, -1, null));
                 break;
             case OpCode.setData:
-                zks.sessionTracker.checkSession(request.sessionId, request.getOwner());
+                zks.sessionTracker.checkSession(request.sessionId, request.getOwner()); // WHZ 检查session状态
                 SetDataRequest setDataRequest = (SetDataRequest)record;
                 if(deserialize)
                     ByteBufferInputStream.byteBuffer2Record(request.request, setDataRequest);
@@ -415,17 +415,17 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
                 validatePath(path, request.sessionId);
                 nodeRecord = getRecordForPath(path);
                 checkACL(zks, nodeRecord.acl, ZooDefs.Perms.WRITE,
-                        request.authInfo);
+                        request.authInfo); // WHZ 检查 ACL 状态
                 version = setDataRequest.getVersion();
                 int currentVersion = nodeRecord.stat.getVersion();
                 if (version != -1 && version != currentVersion) {
                     throw new KeeperException.BadVersionException(path);
                 }
-                version = currentVersion + 1;
+                version = currentVersion + 1; // WHZ 获取当前数据节点版本，并加1
                 request.txn = new SetDataTxn(path, setDataRequest.getData(), version);
                 nodeRecord = nodeRecord.duplicate(request.hdr.getZxid());
                 nodeRecord.stat.setVersion(version);
-                addChangeRecord(nodeRecord);
+                addChangeRecord(nodeRecord); // WHZ 将数据修改消息放入 outstandingChanges 队列
                 break;
             case OpCode.setACL:
                 zks.sessionTracker.checkSession(request.sessionId, request.getOwner());
@@ -545,7 +545,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
                 break;
             case OpCode.setData:
                 SetDataRequest setDataRequest = new SetDataRequest();                
-                pRequest2Txn(request.type, zks.getNextZxid(), request, setDataRequest, true);
+                pRequest2Txn(request.type, zks.getNextZxid(), request, setDataRequest, true); // WHZ 这里新生成一个 zxid
                 break;
             case OpCode.setACL:
                 SetACLRequest setAclRequest = new SetACLRequest();                
@@ -678,7 +678,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
             }
         }
         request.zxid = zks.getZxid();
-        nextProcessor.processRequest(request);
+        nextProcessor.processRequest(request); // WHZ 请求下一个Processor 处理（ProposalRequestProcessor）
     }
 
     private List<ACL> removeDuplicates(List<ACL> acl) {

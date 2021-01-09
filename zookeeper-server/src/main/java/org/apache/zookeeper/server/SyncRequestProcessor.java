@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
  *             be null. This change the semantic of txnlog on the observer
  *             since it only contains committed txns.
  */
-public class SyncRequestProcessor extends ZooKeeperCriticalThread implements RequestProcessor {
+public class SyncRequestProcessor extends ZooKeeperCriticalThread implements RequestProcessor { // WHZ 写 WAL 日志
     private static final Logger LOG = LoggerFactory.getLogger(SyncRequestProcessor.class);
     private final ZooKeeperServer zks;
     private final LinkedBlockingQueue<Request> queuedRequests =
@@ -124,20 +124,20 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
             while (true) {
                 Request si = null;
                 if (toFlush.isEmpty()) {
-                    si = queuedRequests.take();
+                    si = queuedRequests.take(); //WHZ 没有待flush到磁盘的事务日志，从新请求队列同步阻塞式取请求消息
                 } else {
-                    si = queuedRequests.poll();
+                    si = queuedRequests.poll(); // WHZ 有待flush到磁盘的事务日志，则从新请求队列同步peek非阻塞式取消息
                     if (si == null) {
-                        flush(toFlush);
+                        flush(toFlush); // WHZ 没有新请求消息过来，则将缓存的事务日志flush写入磁盘
                         continue;
                     }
                 }
                 if (si == requestOfDeath) {
                     break;
                 }
-                if (si != null) {
+                if (si != null) { // WHZ 新请求消息过来
                     // track the number of records written to the log
-                    if (zks.getZKDatabase().append(si)) {
+                    if (zks.getZKDatabase().append(si)) { // WHZ 将请求消息事务写入 WAL（但没有调用flush，没有真正落盘）
                         logCount++;
                         if (logCount > (snapCount / 2 + randRoll)) {
                             setRandRoll(r.nextInt(snapCount/2));
@@ -174,7 +174,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
                         continue;
                     }
                     toFlush.add(si);
-                    if (toFlush.size() > 1000) {
+                    if (toFlush.size() > 1000) { // 缓存事务消息超过 1000 个消息时一次性flush写入，保证落盘
                         flush(toFlush);
                     }
                 }
@@ -192,7 +192,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
         if (toFlush.isEmpty())
             return;
 
-        zks.getZKDatabase().commit();
+        zks.getZKDatabase().commit(); // WHZ 将缓存的事务日志写入 dataLogDir 对应磁盘
         while (!toFlush.isEmpty()) {
             Request i = toFlush.remove();
             if (nextProcessor != null) {

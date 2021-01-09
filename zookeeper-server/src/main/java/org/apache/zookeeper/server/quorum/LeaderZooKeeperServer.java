@@ -61,14 +61,14 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
         RequestProcessor toBeAppliedProcessor = new Leader.ToBeAppliedRequestProcessor(
                 finalProcessor, getLeader().toBeApplied);
-        commitProcessor = new CommitProcessor(toBeAppliedProcessor,
+        commitProcessor = new CommitProcessor(toBeAppliedProcessor, // WHZ leadder中 CommitProcessor 的下一个Processor 是 ToBeAppliedRequestProcessor
                 Long.toString(getServerId()), false,
                 getZooKeeperServerListener());
         commitProcessor.start();
         ProposalRequestProcessor proposalProcessor = new ProposalRequestProcessor(this,
                 commitProcessor);
         proposalProcessor.initialize();
-        firstProcessor = new PrepRequestProcessor(this, proposalProcessor);
+        firstProcessor = new PrepRequestProcessor(this, proposalProcessor); // WHZ PrepRequestProcessor 的下一个 Processor 是 ProposalRequestProcessor
         ((PrepRequestProcessor)firstProcessor).start();
     }
 

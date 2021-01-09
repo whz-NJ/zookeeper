@@ -397,7 +397,7 @@ public class Leader {
             readyToStart = true;
             long epoch = getEpochToPropose(self.getId(), self.getAcceptedEpoch());
             
-            zk.setZxid(ZxidUtils.makeZxid(epoch, 0));
+            zk.setZxid(ZxidUtils.makeZxid(epoch, 0)); // WHZ 新的Leader将最新的 zxid 设置为 epoch+1 | 0
             
             synchronized(this){
                 lastProposed = zk.getZxid();
@@ -603,12 +603,12 @@ public class Leader {
             return;
         }
         
-        p.ackSet.add(sid);
+        p.ackSet.add(sid); // WHZ 确认收到一个 ACK
         if (LOG.isDebugEnabled()) {
             LOG.debug("Count for zxid: 0x{} is {}",
                     Long.toHexString(zxid), p.ackSet.size());
         }
-        if (self.getQuorumVerifier().containsQuorum(p.ackSet)){             
+        if (self.getQuorumVerifier().containsQuorum(p.ackSet)){      // WHZ 收到来自Fllower的ACK超过集群节点（包括自己）半数（会给自己产生的 Proposal 回复 ACK）
             if (zxid != lastCommitted+1) {
                 LOG.warn("Commiting zxid 0x{} from {} not first!",
                         Long.toHexString(zxid), followerAddr);
@@ -622,9 +622,9 @@ public class Leader {
             if (p.request == null) {
                 LOG.warn("Going to commmit null request for proposal: {}", p);
             }
-            commit(zxid);
+            commit(zxid); // 广播 Commit 消息给所有 Follower 节点
             inform(p);
-            zk.commitProcessor.commit(p.request);
+            zk.commitProcessor.commit(p.request); // WHZ 唤醒 CommitProcessor
             if(pendingSyncs.containsKey(zxid)){
                 for(LearnerSyncRequest r: pendingSyncs.remove(zxid)) {
                     sendSync(r);
@@ -668,11 +668,11 @@ public class Leader {
          */
         public void processRequest(Request request) throws RequestProcessorException {
             // request.addRQRec(">tobe");
-            next.processRequest(request);
+            next.processRequest(request); // WHZ ToBeAppliedRequestProcessor 的下一个 Processor 是 FinalRequestProcessor
             Proposal p = toBeApplied.peek();
             if (p != null && p.request != null
                     && p.request.zxid == request.zxid) {
-                toBeApplied.remove();
+                toBeApplied.remove(); // FinalRequestProcessor 处理完了才把消息从 toBeApplied 移除
             }
         }
 

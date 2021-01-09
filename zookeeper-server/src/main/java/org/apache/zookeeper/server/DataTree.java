@@ -519,9 +519,9 @@ public class DataTree {
         byte lastdata[] = null;
         synchronized (n) {
             lastdata = n.data;
-            n.data = data;
+            n.data = data; // WHZ 更新内存里的数据
             n.stat.setMtime(time);
-            n.stat.setMzxid(zxid);
+            n.stat.setMzxid(zxid); // WHZ 更新内存里数据对应的 Mzxid
             n.stat.setVersion(version);
             n.copyStat(s);
         }
@@ -725,7 +725,7 @@ public class DataTree {
                     rc.path = deleteTxn.getPath();
                     deleteNode(deleteTxn.getPath(), header.getZxid());
                     break;
-                case OpCode.setData:
+                case OpCode.setData: // WHZ 更新内存数据
                     SetDataTxn setDataTxn = (SetDataTxn) txn;
                     rc.path = setDataTxn.getPath();
                     rc.stat = setData(setDataTxn.getPath(), setDataTxn

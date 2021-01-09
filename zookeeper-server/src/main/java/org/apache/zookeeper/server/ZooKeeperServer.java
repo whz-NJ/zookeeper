@@ -278,10 +278,10 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
          * See ZOOKEEPER-1642 for more detail.
          */
         if(zkDb.isInitialized()){
-            setZxid(zkDb.getDataTreeLastProcessedZxid());
+            setZxid(zkDb.getDataTreeLastProcessedZxid());  // WHZ hzxid 为快照数据里最大的 zxid
         }
         else {
-            setZxid(zkDb.loadDataBase());
+            setZxid(zkDb.loadDataBase()); // WHZ hzxid 为快照数据里最大的 zxid
         }
         
         // Clean up dead sessions
@@ -1073,7 +1073,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         ProcessTxnResult rc;
         int opCode = hdr.getType();
         long sessionId = hdr.getClientId();
-        rc = getZKDatabase().processTxn(hdr, txn);
+        rc = getZKDatabase().processTxn(hdr, txn); // WHZ 更新内存里的数据
         if (opCode == OpCode.createSession) {
             if (txn instanceof CreateSessionTxn) {
                 CreateSessionTxn cst = (CreateSessionTxn) txn;

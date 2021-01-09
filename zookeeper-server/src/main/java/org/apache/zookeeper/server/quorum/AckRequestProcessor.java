@@ -42,8 +42,8 @@ class AckRequestProcessor implements RequestProcessor {
      */
     public void processRequest(Request request) {
         QuorumPeer self = leader.self;
-        if(self != null)
-            leader.processAck(self.getId(), request.zxid, null);
+        if(self != null)                                                     // WHZ AckRequestProcessor 的上一个 Processor 是 SyncRequestProcessor
+            leader.processAck(self.getId(), request.zxid, null);  // WHZ 所以 Leader 在写WAL日志成功后页会给自己发一个Ack消息
         else
             LOG.error("Null QuorumPeer");
     }
